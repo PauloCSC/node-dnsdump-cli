@@ -1,0 +1,25 @@
+{
+  "name": "nodejstools",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "cli-spinners": "^2.6.1",
+    "colorette": "^2.0.16",
+    "ora": "^5.4.1",
+    "pino": "^7.10.0",
+    "pino-pretty": "^7.6.1",
+    "puppeteer": "^13.5.2"
+  },
+  "dependencies": {
+    "ip-regex": "^4.3.0",
+    "node-fetch": "^2.6.7",
+    "ping": "^0.4.1"
+  }
+}

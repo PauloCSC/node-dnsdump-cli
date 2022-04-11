@@ -4,9 +4,11 @@
 // > Error crawling https://domain.invalid/: net::ERR_NAME_NOT_RESOLVED at https://domain.invalid/
 
 const { Cluster } = require('puppeteer-cluster');
+const ping = require("ping");
 const ora = require("ora");
 const pino = require("pino");
 const pretty = require("pino-pretty");
+const puppeteer = require("puppeteer");
 const colorette = require("colorette");
 
 const URL = 'https://dnsdumpster.com/';
@@ -63,7 +65,12 @@ async function pingHost (hosts) {
     }
 }
 
+function startSpinner(message){
+    spinner = ora(message).start();
+}
+
 async function handleError(message, e){
+    spinner.fail(message).clear();
     logger.fatal(message + '\n' + e.toString());
     // await context.close();
     return;
@@ -74,6 +81,7 @@ function showVerbosity(verbosity){
         case 0: //nothing show -- prod
             console.log = function () { };
             spinner = ora({text:'prod message',isSilent:true});
+            startSpinner = function () { };
             // ignoring all fields
             logger = pino(pretty({
                 ignore: 'pid,hostname,time,msg,level',
@@ -91,6 +99,7 @@ function showVerbosity(verbosity){
             break;
         case 2: //only show logger -- other
             spinner = ora({text:'dev 2 message',isSilent:true});
+            startSpinner = function () { };
             takeScreenshot = true;
             break;
     }
@@ -99,7 +108,7 @@ function showVerbosity(verbosity){
 async function getDataTable (SelectorTable,page) {
     return await page.$$eval(SelectorTable, rows => {
         return Array.from(rows, row => {
-            let columns;
+            let columns = null;
             try{
                 columns = row.querySelectorAll('td');
             }catch {
@@ -134,6 +143,7 @@ async function getAll (page, domain, ENV, verbosity)  {
     try {
         // navigate to the target page
         await page.goto(URL, { waitUntil: 'domcontentloaded' });
+        // spinner.succeed('Browsed to DNSDumpster.com - ' + domain).clear();
         logger.info('Browsed to DNSDumpster.com');
     } catch (e) {
         await handleError('error while loading the page',e);
@@ -149,6 +159,7 @@ async function getAll (page, domain, ENV, verbosity)  {
         await page.$eval(searchSelector, (element, domain) => {
             element.value = domain;
         }, domain);
+        // spinner.succeed("Domain Setted " + domain).clear();
         logger.info("Domain Setted " + domain);
     }catch (e){
         await handleError('Error during setting domain',e);
@@ -159,6 +170,7 @@ async function getAll (page, domain, ENV, verbosity)  {
             page.waitForNavigation({waitUntil: "domcontentloaded"}),
             page.click(buttonSelector)
         ]);
+        // spinner.succeed("Successfully requested").clear();
         logger.info("Successfully requested");
     } catch (e) {
         await handleError('Request failed',e);
@@ -167,6 +179,7 @@ async function getAll (page, domain, ENV, verbosity)  {
         startSpinner("Taking screenshot");
         try {
             await page.screenshot({path: `${domain}-screenshot.png`, fullPage: true});
+            // spinner.succeed(`Screenshot saved: ${domain}-screenshot.png`).clear();
             logger.info(`Screenshot saved: ${domain}-screenshot.png`);
         } catch (e) {
             await handleError('Screenshot failed', e);
@@ -176,9 +189,11 @@ async function getAll (page, domain, ENV, verbosity)  {
     try{
         const dataDNS = await getDataTable(DNSServersSelector,page);
         if (dataDNS.length === 0) {
+            // spinner.warn("Zero DNS Servers retrieved").clear();
             logger.warn("Zero DNS Servers retrieved <!>");
         }
         else {
+            // spinner.succeed(`${dataDNS.length} DNS Servers retrieved`).clear();
             logger.info("DNS Servers retrieved:");
             console.log("host","ip","country");
             dataDNS.forEach(e => {
@@ -193,9 +208,11 @@ async function getAll (page, domain, ENV, verbosity)  {
     try{
         const dataMX = await getDataTable(MXRecordsSelector,page);
         if (dataMX.length === 0) {
+            // spinner.warn("Zero TXT Records retrieved").clear();
             logger.warn("Zero TXT Records retrieved <!>");
         }
         else {
+            // spinner.succeed(`${dataMX.length} MX Records retrieved`).clear();
             logger.info("MX Records retrieved:");
             dataMX.forEach(e => {
                 console.log(e[0].split(" ")[1], e[1].split("\n")[0], e[1].split("\n")[1], e[2].split("\n")[1]);
@@ -209,9 +226,11 @@ async function getAll (page, domain, ENV, verbosity)  {
     try{
         const dataTXT = await getDataTable(TXTRecordsSelector,page);
         if (dataTXT.length === 0) {
+            // spinner.warn("Zero TXT Records retrieved").clear();
             logger.warn("Zero TXT Records retrieved <!>");
         }
         else{
+            // spinner.succeed(`${dataTXT.length} TXT Records retrieved`).clear();
             logger.info("TXT Records retrieved:");
             dataTXT.forEach(e => {
                 console.log(e[0].slice(1, -1));
@@ -229,8 +248,10 @@ async function getAll (page, domain, ENV, verbosity)  {
     try {
         const dataHosts = await getDataTable(HostRecordsSelector,page);
         if (dataHosts.length === 0) {
+            // spinner.warn("Zero Hosts retrieved").clear();
             logger.warn("Zero Hosts retrieved <!>");}
         else {
+            // spinner.succeed(`${dataHosts.length} Hosts Records retrieved`).clear();
             logger.info("Hosts Records retrieved:");
             console.log("host","ip","sameresolve","provider","country");
             for (const e of dataHosts) {
@@ -255,14 +276,14 @@ async function getAll (page, domain, ENV, verbosity)  {
 //------------- Functions utils END ----------------
 
 (async () => {
-    let domains = []; // Enter domains to proof
+    let domains = ['ztrm99.com','copeinca.com.pe','panamericansilver.com.pe','incarail.com', 'liderman.com.pe'];
     // Create a cluster with 2 workers
     const cluster = await Cluster.launch({
         concurrency: Cluster.CONCURRENCY_CONTEXT,
-        maxConcurrency: 2, // Change me if u can
+        maxConcurrency: 2,
         // monitor: true,
         puppeteerOptions: {
-            headless: true,
+            headless: false,
             args: [
                 '--incognito',
                 '--no-sandbox',
@@ -288,8 +309,10 @@ async function getAll (page, domain, ENV, verbosity)  {
     });
 
     domains.forEach(domain => {
-        cluster.queue(domain);
+       cluster.queue(domain);
     });
+    // cluster.queue('https://www.google.com/');
+    // cluster.queue('https://github.com/');
     await cluster.idle();
     await cluster.close();
 })();
